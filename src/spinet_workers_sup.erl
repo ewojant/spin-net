@@ -1,5 +1,4 @@
-%% @author Wojciech
-%% @doc @todo Add description to spinet_workers_sup.
+%% @author wojanton
 
 
 -module(spinet_workers_sup).
@@ -39,7 +38,7 @@ start_link(NumWorkers) ->
 %% ====================================================================
 init([NumWorkers]) ->
 	Children = [{spinet_worker:process_name(Id),
-			 {spinet_worker, start_link, [Id]},
+			{spinet_worker, start_link, [Id]},
 			  permanent, 1000, worker, [spinet_worker]}
 			|| Id <- lists:seq(1, NumWorkers)],
     {ok,{{one_for_one,0,1}, Children}}.

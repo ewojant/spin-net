@@ -20,7 +20,7 @@
 %%====================================================================
 
 start_link(Args) ->
-	lager:info("Starting toplevel supervisor, Args=~p", [Args]),
+	logger:info("Starting toplevel supervisor, Args=~p", [Args]),
     supervisor:start_link({local, ?SERVER}, ?MODULE, Args).
 
 %%====================================================================

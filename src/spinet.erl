@@ -1,6 +1,4 @@
-%% @author Wojciech
-%% @doc @todo Add description to spinet.
-
+%% @author wojanton
 
 -module(spinet).
 
@@ -9,7 +7,7 @@
 %% ====================================================================
 -export([degree/4]).
 
-degree(N, M, Type, Number) ->
+degree(_N, _M, _Type, _Number) ->
 	ok.
 
 %% ====================================================================

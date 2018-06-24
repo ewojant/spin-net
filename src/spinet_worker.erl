@@ -1,4 +1,4 @@
-%% @author Wojciech
+%% @author wojanton
 %% @doc @todo Add description to spinet_worker.
 
 
@@ -77,7 +77,7 @@ handle_call(_Request, _From, State) ->
 	Timeout :: non_neg_integer() | infinity.
 %% ====================================================================
 handle_cast({execute, {Mod, Fun, Args}}, State) ->
-	Result = erlang:apply(Mod, Fun, Args),
+	_Result = erlang:apply(Mod, Fun, Args),
 	{noreply, State};
 
 handle_cast(_Msg, State) ->

@@ -5,8 +5,7 @@
   {mod, { spinet_app, [4]}},
   {applications,
    [kernel,
-    stdlib,
-    lager
+    stdlib
    ]},
   {env,[]},
   {modules, []},

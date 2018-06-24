@@ -1,11 +1,8 @@
-%% @author Wojciech
-%% @doc @todo Add description to spinet_builder.
+%% @author wojanton
 
 -module(spinet_builder).
 
--ifdef(EUNIT).
 -export([initial_network/1]).
--endif.
 
 %% ====================================================================
 %% API functions
@@ -34,7 +31,7 @@ initial_network(M) ->
 
 
 create_network_aux(N, M, Type, Network, NextIdx) when NextIdx > N ->
-	lager:info("builder - finished net: N=~w, M=~w, type=~w, NextIdx=~w", [N, M, Type, NextIdx]),
+	logger:info("builder - finished net: N=~w, M=~w, type=~w, NextIdx=~w", [N, M, Type, NextIdx]),
 	Network;
 
 create_network_aux(N, M, exn, Net, NextIdx) ->

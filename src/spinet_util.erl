@@ -1,4 +1,4 @@
-%% @author Wojciech
+%% @author wojanton
 %% @doc @todo Add description to spinet_util.
 
 

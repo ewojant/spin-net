@@ -1,6 +1,4 @@
-%% @author Wojciech
-%% @doc @todo Add description to spinet_scheduler.
-
+%% @author wojanton
 
 -module(spinet_scheduler).
 -behaviour(gen_server).
