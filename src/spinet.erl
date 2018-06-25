@@ -8,7 +8,7 @@
 -export([degree/4]).
 
 degree(_N, _M, _Type, _Number) ->
-	ok.
+    ok.
 
 %% ====================================================================
 %% Internal functions

@@ -20,7 +20,7 @@
 %%====================================================================
 
 start_link(Args) ->
-	logger:info("Starting toplevel supervisor, Args=~p", [Args]),
+    logger:info("Starting toplevel supervisor, Args=~p", [Args]),
     supervisor:start_link({local, ?SERVER}, ?MODULE, Args).
 
 %%====================================================================
@@ -29,9 +29,9 @@ start_link(Args) ->
 
 %% Child :: {Id,StartFunc,Restart,Shutdown,Type,Modules}
 init([NumWorkers]) ->
-	WorkersSup = {spinet_workers_sup,
-			      {spinet_workers_sup, start_link, [NumWorkers]},
-			      permanent, 1000, supervisor, [spinet_workers_sup]},
+    WorkersSup = {spinet_workers_sup,
+                  {spinet_workers_sup, start_link, [NumWorkers]},
+                  permanent, 1000, supervisor, [spinet_workers_sup]},
     {ok, { {one_for_all, 0, 1}, [WorkersSup]} }.
 
 %%====================================================================
