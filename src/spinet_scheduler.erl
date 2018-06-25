@@ -10,7 +10,10 @@
 %% ====================================================================
 -export([start_link/0,
          register_worker/1,
-         worker_done/2]).
+         add_task/1,
+         task_done/2]).
+
+-export([dump/0]).
 
 -define(SERVER, ?MODULE).
 
@@ -20,9 +23,14 @@ start_link() ->
 register_worker(Id) ->
     gen_server:cast(?SERVER, {register, Id, self()}).
 
-worker_done(Id, Result) ->
-    gen_server:cast(?SERVER, {worker_done, Id, Result}).
+add_task(Task) ->
+    gen_server:cast(?SERVER, {add_task, Task}).
 
+task_done(Id, Result) ->
+    gen_server:cast(?SERVER, {task_done, Id, Result}).
+
+dump() ->
+    gen_server:call(?SERVER, dump).
 %% ====================================================================
 %% Behavioural functions
 %% ====================================================================
@@ -63,6 +71,10 @@ init([]) ->
     Timeout :: non_neg_integer() | infinity,
     Reason :: term().
 %% ====================================================================
+handle_call(dump, _From, State) ->
+    io:format("~p state: ~p~n", [?MODULE, State]),
+    {reply, ok, State};
+
 handle_call(_Request, _From, State) ->
     Reply = ok,
     {reply, Reply, State}.
@@ -88,8 +100,19 @@ handle_cast({register, Id, Pid},
                       free_workers => [Id | Free]},
     {noreply, NewState};
 
-handle_cast({worker_done, Id, Result}, State) ->
-    NewState = handle_worker_done(Id, Result, State),
+handle_cast({add_task, Task},
+            #{free_workers := Free0,
+              tasks := Tasks0} = State) ->
+    case schedule_task(Task, Free0) of
+        {ok, Free1} ->
+            {noreply, State#{free_workers => Free1}};
+
+        {error, _Reason} ->
+            {noreply, State#{tasks => Tasks0 ++ [Task]}}
+    end;
+
+handle_cast({task_done, Id, Result}, State) ->
+    NewState = handle_task_done(Id, Result, State),
     {noreply, NewState};
 
 handle_cast(_Msg, State) ->
@@ -159,23 +182,35 @@ code_change(_OldVsn, State, _Extra) ->
 %% ====================================================================
 %% Internal functions
 %% ====================================================================
-handle_worker_done(Id, Result,
-                   #{free_workers := Free0,
-                     tasks := [],
-                     results := Results0} = State) ->
+handle_task_done(Id, Result,
+                 #{free_workers := Free0,
+                   tasks := [],
+                   results := Results0} = State) ->
     % no tasks available so just add worker to free list
     State#{free_workers => Free0 ++ [Id],
            results => [Result | Results0]};
 
-handle_worker_done(Id, Result,
-                   #{free_workers := Free0,
-                     tasks := [Task | RestTask],
-                     results := Results0} = State) ->
-    Free1 = schedule_task(Task, Free0 ++ [Id]),
-    State#{free_workers => Free1,
-           tasks => RestTask,
-           results => [Result | Results0]}.
+handle_task_done(Id, Result,
+                 #{free_workers := Free0,
+                   tasks := [Task | RestTask] = Tasks0,
+                   results := Results0} = State) ->
+    % add Id of finished worker at the end of list
+    Free1 = Free0 ++ [Id],
+    case schedule_task(Task, Free1) of
+        {ok, Free2} ->
+            State#{free_workers => Free2,
+                   tasks => RestTask,
+                   results => [Result | Results0]};
+        {error, _Reason} ->
+            State#{free_workers => Free1,
+                   tasks => Tasks0,
+                   results => [Result | Results0]}
+    end.
+
+
+schedule_task(Task, []) ->
+    {error, {'No free workers to schedule: ', Task}};
 
 schedule_task(Task, [Id | RestFree]) ->
     spinet_worker:execute(Id, Task),
-    RestFree.
+    {ok, RestFree}.

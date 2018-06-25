@@ -29,10 +29,13 @@ start_link(Args) ->
 
 %% Child :: {Id,StartFunc,Restart,Shutdown,Type,Modules}
 init([NumWorkers]) ->
+    Scheduler = {spinet_scheduler,
+                  {spinet_scheduler, start_link, []},
+                  permanent, 1000, worker, [spinet_scheduler]},
     WorkersSup = {spinet_workers_sup,
                   {spinet_workers_sup, start_link, [NumWorkers]},
                   permanent, 1000, supervisor, [spinet_workers_sup]},
-    {ok, { {one_for_all, 0, 1}, [WorkersSup]} }.
+    {ok, { {one_for_all, 0, 1}, [Scheduler, WorkersSup]} }.
 
 %%====================================================================
 %% Internal functions

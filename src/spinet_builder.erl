@@ -63,7 +63,7 @@ find_sfn_neighbours(Network, M) ->
     SearchList = lists:foldl(
         fun(#{idx := Idx, neighbours := Neighbours}, AccList) ->
              % put Idx into list as many times as this node has neighbours
-            [lists:duplicate(length(Neighbours), Idx) | AccList]
+            lists:duplicate(length(Neighbours), Idx) ++ AccList
         end,
         [],
         Network),

@@ -79,7 +79,7 @@ handle_call(_Request, _From, State) ->
 handle_cast({execute, {Mod, Fun, Args}},
             #{id := Id} = State) ->
     Result = erlang:apply(Mod, Fun, Args),
-    spinet_scheduler:worker_done(Id, Result),
+    spinet_scheduler:task_done(Id, Result),
     {noreply, State};
 
 handle_cast(_Msg, State) ->
