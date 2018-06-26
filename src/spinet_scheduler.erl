@@ -9,9 +9,11 @@
 %% API functions
 %% ====================================================================
 -export([start_link/0,
+         stop/0,
          register_worker/1,
          add_task/1,
-         task_done/2]).
+         task_done/2,
+         get_results/0]).
 
 -export([dump/0]).
 
@@ -19,6 +21,9 @@
 
 start_link() ->
     gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
+
+stop() ->
+    gen_server:stop(?SERVER).
 
 register_worker(Id) ->
     gen_server:cast(?SERVER, {register, Id, self()}).
@@ -28,6 +33,9 @@ add_task(Task) ->
 
 task_done(Id, Result) ->
     gen_server:cast(?SERVER, {task_done, Id, Result}).
+
+get_results() ->
+    gen_server:call(?SERVER, get_results).
 
 dump() ->
     gen_server:call(?SERVER, dump).
@@ -75,6 +83,10 @@ handle_call(dump, _From, State) ->
     io:format("~p state: ~p~n", [?MODULE, State]),
     {reply, ok, State};
 
+handle_call(get_results, _From,
+            #{results := Results} = State) ->
+    {reply, lists:reverse(Results), State};
+
 handle_call(_Request, _From, State) ->
     Reply = ok,
     {reply, Reply, State}.
@@ -94,26 +106,33 @@ handle_call(_Request, _From, State) ->
 
 handle_cast({register, Id, Pid},
             State = #{workers := Workers0,
-                      free_workers := Free}) ->
+                      free_workers := Free,
+                      tasks := Tasks0}) ->
     MRef = erlang:monitor(process, Pid),
+    {NewTasks, NewFreeWorkers} =
+        schedule_tasks(Tasks0, Free ++ [Id]),
     NewState = State#{workers => Workers0#{Id => {Pid, MRef}},
-                      free_workers => [Id | Free]},
+                      free_workers => NewFreeWorkers,
+                      tasks => NewTasks},
     {noreply, NewState};
 
 handle_cast({add_task, Task},
             #{free_workers := Free0,
               tasks := Tasks0} = State) ->
-    case schedule_task(Task, Free0) of
-        {ok, Free1} ->
-            {noreply, State#{free_workers => Free1}};
+    {NewTasks, NewWorkers} =
+        schedule_tasks(Tasks0 ++ [Task], Free0),
+    {noreply, State#{tasks => NewTasks,
+                     free_workers => NewWorkers}};
 
-        {error, _Reason} ->
-            {noreply, State#{tasks => Tasks0 ++ [Task]}}
-    end;
+handle_cast({task_done, Id, Result},
+            #{free_workers := Workers0,
+              tasks := Tasks0,
+              results := Results0} = State) ->
+    {NewTasks, NewWorkers} = schedule_tasks(Tasks0, Workers0 ++ [Id]),
 
-handle_cast({task_done, Id, Result}, State) ->
-    NewState = handle_task_done(Id, Result, State),
-    {noreply, NewState};
+    {noreply, State#{free_workers => NewWorkers,
+                     tasks => NewTasks,
+                     results => [Result | Results0]}};
 
 handle_cast(_Msg, State) ->
     {noreply, State}.
@@ -182,35 +201,11 @@ code_change(_OldVsn, State, _Extra) ->
 %% ====================================================================
 %% Internal functions
 %% ====================================================================
-handle_task_done(Id, Result,
-                 #{free_workers := Free0,
-                   tasks := [],
-                   results := Results0} = State) ->
-    % no tasks available so just add worker to free list
-    State#{free_workers => Free0 ++ [Id],
-           results => [Result | Results0]};
 
-handle_task_done(Id, Result,
-                 #{free_workers := Free0,
-                   tasks := [Task | RestTask] = Tasks0,
-                   results := Results0} = State) ->
-    % add Id of finished worker at the end of list
-    Free1 = Free0 ++ [Id],
-    case schedule_task(Task, Free1) of
-        {ok, Free2} ->
-            State#{free_workers => Free2,
-                   tasks => RestTask,
-                   results => [Result | Results0]};
-        {error, _Reason} ->
-            State#{free_workers => Free1,
-                   tasks => Tasks0,
-                   results => [Result | Results0]}
-    end.
+schedule_tasks(Tasks, Workers) when Tasks == [];
+                                    Workers == [] ->
+    {Tasks, Workers};
 
-
-schedule_task(Task, []) ->
-    {error, {'No free workers to schedule: ', Task}};
-
-schedule_task(Task, [Id | RestFree]) ->
-    spinet_worker:execute(Id, Task),
-    {ok, RestFree}.
+schedule_tasks([Task | RestTask], [WorkerId | RestWorker]) ->
+    spinet_worker:execute(WorkerId, Task),
+    schedule_tasks(RestTask, RestWorker).
