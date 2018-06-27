@@ -29,8 +29,8 @@ unique_sequence_test(_Cfg) ->
         % usort removes duplicates so this will check if there were any
         ?assertEqual(Size, length(lists:usort(Seq))),
         ?assert(MaxVal >= lists:max(Seq))
-        end
-        || {Size, MaxVal} <- [{5, 20}, {100, 1000}, {500, 500}, {20, 10000}]].
+     end
+     || {Size, MaxVal} <- [{5, 20}, {100, 1000}, {500, 500}, {20, 10000}]].
 
 unique_sequence_negative_test(_Cfg) ->
     ?assertError(function_clause, spinet_util:unique_seq(10, 2)),
@@ -45,11 +45,11 @@ unique_select_test(_Cfg) ->
                                                 lists:member(Elem, InList)
                                             end,
                                             List))
-        end
-        || {InList, NumElemsToSelect} <- [{lists:seq(1, 50), 10},
-                                        {lists:seq(5, 10), 3},
-                                        {lists:seq(1, 1000), 500},
-                                        {[1,1,1,1,1,1,2,3,4,5], 5}]].
+     end
+     || {InList, NumElemsToSelect} <- [{lists:seq(1, 50), 10},
+                                       {lists:seq(5, 10), 3},
+                                       {lists:seq(1, 1000), 500},
+                                       {[1,1,1,1,1,1,2,3,4,5], 5}]].
 
 unique_select_negative_test(_Cfg) ->
     ?assertError(function_clause, spinet_util:unique_select([50], 2)),

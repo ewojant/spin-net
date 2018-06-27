@@ -24,6 +24,7 @@ cleanup(_Cfg) ->
 %% ====================================================================
 
 initial_network_test(_Cfg) ->
+    ct:print("Starting test ~p", [?FUNCTION_NAME]),
     MaxM = 1000,
     Repeats = 100,
     M_list = [1,2,5 | [rand:uniform(MaxM) || _X <- lists:seq(1, Repeats)]],
@@ -36,21 +37,30 @@ initial_network_test(_Cfg) ->
             end
             || #{idx := Idx, neighbours := Neighbours} <- Net]
         end
-        || M <- M_list].
+        || M <- M_list],
+    ct:print("Test ~p passed", [?FUNCTION_NAME]).
 
-create_exn_normal_test(_Cfg) ->
+create_normal_test(_Cfg) ->
+    ct:print("Starting test ~p", [?FUNCTION_NAME]),
     [begin
-        Net = spinet_builder:create_network(N, M, exn),
+        ct:print("Iteration, N=~p, M=~p, Type=~p", [N, M, Type]),
+        Net = spinet_builder:create_network(N, M, Type),
         ?assertEqual(N, length(Net)),
         [begin
-                % take Idx-th Node from Net
-                #{idx := NodeIdx, neighbours := Neighbours} = lists:nth(Idx, Net),
-                ?assertEqual(Idx, NodeIdx),
-                ?assertEqual(M, length(lists:usort(Neighbours))),
-                PotentialNeighbours = lists:delete(NodeIdx, lists:seq(1, N)),
-                [?assert(lists:member(NeigbourIdx, PotentialNeighbours)) || NeigbourIdx <- Neighbours]
-            end
-            || Idx <- lists:seq(1, N)]
+            % take Idx-th Node from Net
+            #{idx := NodeIdx, neighbours := Neighbours} = lists:nth(Idx, Net),
+            ?assertEqual(Idx, NodeIdx),
+            ?assertEqual(M, length(lists:usort(Neighbours))),
+            PotentialNeighbours = lists:seq(1, max(NodeIdx-1, M+1)),
+            % ct:print("NodeIdx=~p,~nNeighbours=~p,~nPotentialNeighbours=~p", [NodeIdx, Neighbours, PotentialNeighbours]),
+            [begin
+                 
+                 ?assert(lists:member(NeigbourIdx, PotentialNeighbours))
+             end
+             || NeigbourIdx <- Neighbours]
         end
-        || {N, M} <- [{5, 1}, {10, 9}, {1000, 50}]
-    ].
+        || Idx <- lists:seq(1, N)]
+     end
+     || {N, M} <- [{5, 1}, {10, 9}, {1000, 50}], Type <- [exn, sfn]
+    ],
+    ct:print("Test ~p passed", [?FUNCTION_NAME]).

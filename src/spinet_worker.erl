@@ -13,14 +13,22 @@
          process_name/1,
          execute/2]).
 
+-type worker_id() :: non_neg_integer().
+
+-spec start_link(Id :: worker_id()) -> gen_server:startlink_return().
 start_link(Id) ->
     gen_server:start_link({local, process_name(Id)}, ?MODULE, [Id], []).
 
+-spec process_name(Id :: worker_id()) -> atom().
 process_name(Id) ->
     list_to_atom(lists:concat([?MODULE_STRING, "_", Id])).
 
-execute(Id, Task) ->
-    gen_server:cast(process_name(Id), {execute, Task}).
+-spec execute(Id, {TaskGroupId, Task}) -> ok when
+        Id :: worker_id(),
+        TaskGroupId :: spinet_scheduler:task_group_id(),
+        Task :: spinet_scheduler:task().
+execute(Id, {TaskGroupId, Task}) ->
+    gen_server:cast(process_name(Id), {execute, TaskGroupId, Task}).
 
 %% ====================================================================
 %% Behavioural functions
@@ -76,10 +84,10 @@ handle_call(_Request, _From, State) ->
     NewState :: term(),
     Timeout :: non_neg_integer() | infinity.
 %% ====================================================================
-handle_cast({execute, {Mod, Fun, Args}},
+handle_cast({execute, TaskGroupId, {Mod, Fun, Args}},
             #{id := Id} = State) ->
     Result = erlang:apply(Mod, Fun, Args),
-    spinet_scheduler:task_done(Id, Result),
+    spinet_scheduler:task_done(Id, TaskGroupId, Result),
     {noreply, State};
 
 handle_cast(_Msg, State) ->

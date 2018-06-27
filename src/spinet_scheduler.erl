@@ -12,31 +12,56 @@
          stop/0,
          register_worker/1,
          add_task/1,
-         task_done/2,
-         get_results/0]).
+         add_task_group/1,
+         task_done/3,
+         get_results/0,
+         get_results/1]).
 
 -export([dump/0]).
 
+-type task() :: mfa().
+-type task_group_id() :: atom() | integer().
+-type task_group() :: {task_group_id(), [task()]}.
+
 -define(SERVER, ?MODULE).
+-define(DEF_GRP_ID, undefined).
 
 start_link() ->
     gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
 
+-spec stop() -> ok.
 stop() ->
     gen_server:stop(?SERVER).
 
+-spec register_worker(Id :: spinet_worker:worker_id()) -> ok.
 register_worker(Id) ->
-    gen_server:cast(?SERVER, {register, Id, self()}).
+    gen_server:cast(?SERVER, {register_worker, Id, self()}).
 
+-spec add_task(Task :: task()) -> ok.
 add_task(Task) ->
     gen_server:cast(?SERVER, {add_task, Task}).
 
-task_done(Id, Result) ->
-    gen_server:cast(?SERVER, {task_done, Id, Result}).
+-spec add_task_group(TaskGroup :: task_group()) -> ok.
+add_task_group(TaskGroup) ->
+    gen_server:cast(?SERVER, {add_task_group, TaskGroup}).
 
+-spec task_done(WorkerId, TaskGroupId, Result) -> ok when
+        WorkerId :: spinet_worker:worker_id(),
+        TaskGroupId :: task_group_id(),
+        Result :: term().
+task_done(WorkerId, TaskGroupId, Result) ->
+    gen_server:cast(?SERVER, {task_done, WorkerId, TaskGroupId, Result}).
+
+-spec get_results() -> [term()].
 get_results() ->
-    gen_server:call(?SERVER, get_results).
+    gen_server:call(?SERVER, {get_results, ?DEF_GRP_ID}).
 
+-spec get_results(TaskGroupId :: task_group_id()) -> [term()].
+get_results(TaskGroupId) ->
+    gen_server:call(?SERVER, {get_results, TaskGroupId}).
+
+
+-spec dump() -> ok.
 dump() ->
     gen_server:call(?SERVER, dump).
 %% ====================================================================
@@ -59,7 +84,7 @@ init([]) ->
     {ok, #{workers => maps:new(),
            free_workers => [],
            tasks => [],
-           results => []}}.
+           results => #{?DEF_GRP_ID => []}}}.
 
 
 %% handle_call/3
@@ -83,9 +108,15 @@ handle_call(dump, _From, State) ->
     io:format("~p state: ~p~n", [?MODULE, State]),
     {reply, ok, State};
 
-handle_call(get_results, _From,
-            #{results := Results} = State) ->
-    {reply, lists:reverse(Results), State};
+handle_call({get_results, TaskGroupId}, _From,
+            #{results := ResultsMap} = State) ->
+    case maps:get(TaskGroupId, ResultsMap, undefined) of
+        undefined ->
+            Reply = {error, {'No results for task group with id: ', TaskGroupId}},
+            {reply, Reply, State};
+        Results ->
+            {reply, lists:reverse(Results), State}
+    end;
 
 handle_call(_Request, _From, State) ->
     Reply = ok,
@@ -104,7 +135,7 @@ handle_call(_Request, _From, State) ->
     Timeout :: non_neg_integer() | infinity.
 %% ====================================================================
 
-handle_cast({register, Id, Pid},
+handle_cast({register_worker, Id, Pid},
             State = #{workers := Workers0,
                       free_workers := Free,
                       tasks := Tasks0}) ->
@@ -120,19 +151,29 @@ handle_cast({add_task, Task},
             #{free_workers := Free0,
               tasks := Tasks0} = State) ->
     {NewTasks, NewWorkers} =
-        schedule_tasks(Tasks0 ++ [Task], Free0),
+        schedule_tasks(Tasks0 ++ [{?DEF_GRP_ID, Task}], Free0),
     {noreply, State#{tasks => NewTasks,
                      free_workers => NewWorkers}};
 
-handle_cast({task_done, Id, Result},
+handle_cast({add_task_group, {TaskGroupId, Tasks} = _TaskGroup},
+            #{free_workers := Free0,
+              tasks := Tasks0} = State) ->
+    TaskList = [{TaskGroupId, Task} || Task <- Tasks],
+    {NewTasks, NewWorkers} =
+        schedule_tasks(Tasks0 ++ TaskList, Free0),
+    {noreply, State#{tasks => NewTasks,
+                     free_workers => NewWorkers}};
+
+handle_cast({task_done, Id, TaskGroupId, Result},
             #{free_workers := Workers0,
               tasks := Tasks0,
               results := Results0} = State) ->
     {NewTasks, NewWorkers} = schedule_tasks(Tasks0, Workers0 ++ [Id]),
+    NewResults = store_result(Result, TaskGroupId, Results0),
 
     {noreply, State#{free_workers => NewWorkers,
                      tasks => NewTasks,
-                     results => [Result | Results0]}};
+                     results => NewResults}};
 
 handle_cast(_Msg, State) ->
     {noreply, State}.
@@ -209,3 +250,7 @@ schedule_tasks(Tasks, Workers) when Tasks == [];
 schedule_tasks([Task | RestTask], [WorkerId | RestWorker]) ->
     spinet_worker:execute(WorkerId, Task),
     schedule_tasks(RestTask, RestWorker).
+
+store_result(Result, TaskGroupId, Results) ->
+    ResultsForGroup = maps:get(TaskGroupId, Results, []),
+    Results#{TaskGroupId => [Result | ResultsForGroup]}.
