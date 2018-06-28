@@ -51,8 +51,7 @@ schedule_task_group_test(_Cfg) ->
     spinet_scheduler:register_worker(WorkerId),
     TaskGroupId = eeee,
     ArgsList = lists:seq(1, 10),
-    Tasks = [?TASK(X) || X <- ArgsList],
-    TaskGroup = {TaskGroupId, Tasks},
+    TaskGroup = {TaskGroupId, [?TASK(X) || X <- ArgsList]},
     spinet_scheduler:add_task_group(TaskGroup),
     timer:sleep(500),
     Results = spinet_scheduler:get_results(TaskGroupId),
@@ -61,6 +60,34 @@ schedule_task_group_test(_Cfg) ->
     exit(Pid, shutdown),
     ct:print("Test ~p passed", [?FUNCTION_NAME]).
 
+multiple_workers_test(_Cfg) ->
+    ct:print("Starting test ~p", [?FUNCTION_NAME]),
+    WorkerPids = [
+        begin
+            {ok, Pid} = spinet_worker:start_link(WorkerId),
+            spinet_scheduler:register_worker(WorkerId),
+            Pid
+        end
+        || WorkerId <- lists:seq(1, 10)],
+    ArgsList = lists:seq(1, 1000),
+    TaskGroupId = "whatever",
+    TaskGroup = {TaskGroupId, [?TASK(X) || X <- ArgsList]},
+    spinet_scheduler:add_task_group(TaskGroup),
+    timer:sleep(1000),
+    Results = spinet_scheduler:get_results(TaskGroupId),
+    ?assert(compare_lists(ArgsList, Results)),
+    [begin unlink(Pid), exit(Pid, shutdown) end || Pid <- WorkerPids],
+    ct:print("Test ~p passed", [?FUNCTION_NAME]).
+
 %% ====================================================================
 %% Internal functions
 %% ====================================================================
+compare_lists([], _) ->
+    true;
+compare_lists([H | Tail], Other) ->
+    case lists:member(H, Other) of
+        true ->
+            compare_lists(Tail, lists:delete(H, Other));
+        false ->
+            false
+    end.
