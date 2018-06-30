@@ -1,8 +1,8 @@
 {application, spinet,
- [{description, "An OTP application"},
-  {vsn, "0.1.0"},
-  {registered, []},
-  {mod, { spinet_app, [4]}},
+ [{description, "Calculations o complex spin networks"},
+  {vsn, "0.2.0"},
+  {registered, [spinet_sup, spinet_scheduler, spinet_workers_sup]},
+  {mod, {spinet, [5]}},
   {applications,
    [kernel,
     stdlib
