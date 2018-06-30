@@ -90,6 +90,12 @@ handle_cast({execute, TaskGroupId, {Mod, Fun, Args}},
     spinet_scheduler:task_done(Id, TaskGroupId, Result),
     {noreply, State};
 
+handle_cast({execute, TaskGroupId, Fun},
+            #{id := Id} = State) when is_function(Fun) ->
+    Result = Fun(),
+    spinet_scheduler:task_done(Id, TaskGroupId, Result),
+    {noreply, State};
+
 handle_cast(_Msg, State) ->
     {noreply, State}.
 

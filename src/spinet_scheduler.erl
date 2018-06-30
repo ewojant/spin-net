@@ -21,7 +21,7 @@
 
 -export([dump/0]).
 
--type task() :: mfa().
+-type task() :: mfa() | function().
 -type task_group_id() :: atom() | integer().
 -type task_group() :: {task_group_id(), [task()]}.
 
