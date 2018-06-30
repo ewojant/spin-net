@@ -10,6 +10,7 @@
 %% ====================================================================
 -export([start_link/0,
          stop/0,
+         get_next_worker_id/0,
          register_worker/1,
          add_task/1,
          add_task_group/1,
@@ -37,6 +38,10 @@ stop() ->
 -spec register_worker(Id :: spinet_worker:worker_id()) -> ok.
 register_worker(Id) ->
     gen_server:cast(?SERVER, {register_worker, Id, self()}).
+
+-spec get_next_worker_id() -> spinet_worker:worker_id().
+get_next_worker_id() ->
+    gen_server:call(?SERVER, get_next_worker_id).
 
 -spec add_task(Task :: task()) -> ok.
 add_task(Task) ->
@@ -144,6 +149,9 @@ handle_call({get_results, TaskGroupId}, From,
             TaskGroup1 = TaskGroup0#{waiters => [From | Waiters]},
             {noreply, State#{task_groups => TaskGroups#{TaskGroupId => TaskGroup1}}}
     end;
+
+handle_call(get_next_worker_id, _From, #{workers := Workers}=State) ->
+    {reply, maps:size(Workers) + 1, State};
 
 handle_call(_Request, _From, State) ->
     Reply = ok,

@@ -4,15 +4,31 @@
 -behaviour(supervisor).
 -export([init/1]).
 
+-define(SERVER, ?MODULE).
+
 %% ====================================================================
 %% API functions
 %% ====================================================================
--export([start_link/1]).
+-export([start_link/0,
+         add_worker/0,
+         add_worker/1]).
 
-start_link(NumWorkers) ->
-    supervisor:start_link({local, ?MODULE}, ?MODULE, [NumWorkers]).
+start_link() ->
+    supervisor:start_link({local, ?SERVER}, ?MODULE, []).
 
+add_worker() ->
+    Id = spinet_scheduler:get_next_worker_id(),
+    ChildSpec = {spinet_worker:process_name(Id),
+                 {spinet_worker, start_link, [Id]},
+                 permanent, 1000, worker, [spinet_worker]},
+    supervisor:start_child(?SERVER, ChildSpec).
 
+-spec add_worker(NumWorkers :: pos_integer()) -> ok.
+add_worker(0) ->
+    ok;
+add_worker(NumWorkers) when NumWorkers > 0 ->
+    add_worker(),
+    add_worker(NumWorkers - 1).
 
 %% ====================================================================
 %% Behavioural functions
@@ -24,12 +40,8 @@ start_link(NumWorkers) ->
 -spec init(Args :: term()) -> Result when
     Result :: supervisor:init_returntype().
 %% ====================================================================
-init([NumWorkers]) ->
-    Children = [{spinet_worker:process_name(Id),
-                {spinet_worker, start_link, [Id]},
-                permanent, 1000, worker, [spinet_worker]}
-                || Id <- lists:seq(1, NumWorkers)],
-    {ok,{{one_for_one,0,1}, Children}}.
+init([]) ->
+    {ok,{{one_for_one,5,10}, []}}.
 
 %% ====================================================================
 %% Internal functions

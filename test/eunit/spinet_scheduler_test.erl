@@ -20,10 +20,13 @@ setup() ->
         begin timer:sleep(T), X end
     ),
     spinet_scheduler:start_link(),
-    #{}.
+    {ok, Pid} = spinet_workers_sup:start_link(),
+    #{workers_sup => Pid}.
 
-cleanup(_Cfg) ->
+cleanup(#{workers_sup := WorkersSupPid}) ->
     spinet_scheduler:stop(),
+    unlink(WorkersSupPid),
+    exit(WorkersSupPid, normal),
     ok.
 
 nothing_scheduled_without_workers_test(_Cfg) ->
@@ -37,23 +40,20 @@ nothing_scheduled_without_workers_test(_Cfg) ->
 
 one_worker_tasks_scheduled_sequentially_test(_Cfg) ->
     ct:print("Starting test ~p", [?FUNCTION_NAME]),
-    WorkerId = 1,
-    {ok, Pid} = spinet_worker:start_link(WorkerId),
-    spinet_scheduler:register_worker(WorkerId),
+
+    spinet_workers_sup:add_worker(),
     ArgsList = lists:seq(1, 50),
     [spinet_scheduler:add_task(?TASK(X)) || X <- ArgsList],
 
     Results = spinet_scheduler:get_results(),
     ?assertEqual(ArgsList, Results),
-    unlink(Pid),
-    exit(Pid, shutdown),
+
     ct:print("Test ~p passed", [?FUNCTION_NAME]).
 
 schedule_task_group_test(_Cfg) ->
     ct:print("Starting test ~p", [?FUNCTION_NAME]),
-    WorkerId = 1,
-    {ok, Pid} = spinet_worker:start_link(WorkerId),
-    spinet_scheduler:register_worker(WorkerId),
+
+    spinet_workers_sup:add_worker(),
     TaskGroupId = eeee,
     ArgsList = lists:seq(1, 10),
     TaskGroup = {TaskGroupId, [?TASK(X) || X <- ArgsList]},
@@ -61,19 +61,12 @@ schedule_task_group_test(_Cfg) ->
 
     Results = spinet_scheduler:get_results(TaskGroupId),
     ?assertEqual(ArgsList, Results),
-    unlink(Pid),
-    exit(Pid, shutdown),
+
     ct:print("Test ~p passed", [?FUNCTION_NAME]).
 
 multiple_workers_test(_Cfg) ->
     ct:print("Starting test ~p", [?FUNCTION_NAME]),
-    WorkerPids = [
-        begin
-            {ok, Pid} = spinet_worker:start_link(WorkerId),
-            spinet_scheduler:register_worker(WorkerId),
-            Pid
-        end
-        || WorkerId <- lists:seq(1, 10)],
+    spinet_workers_sup:add_worker(10),
     ArgsList = lists:seq(1, 1000),
     TaskGroupId = "whatever",
     TaskGroup = {TaskGroupId, [?TASK(X) || X <- ArgsList]},
@@ -81,18 +74,12 @@ multiple_workers_test(_Cfg) ->
 
     Results = spinet_scheduler:get_results(TaskGroupId),
     ?assert(compare_lists(ArgsList, Results)),
-    [begin unlink(Pid), exit(Pid, shutdown) end || Pid <- WorkerPids],
+
     ct:print("Test ~p passed", [?FUNCTION_NAME]).
 
 multiple_waiters_test(_Cfg) ->
     ct:print("Starting test ~p", [?FUNCTION_NAME]),
-    WorkerPids = [
-        begin
-            {ok, Pid} = spinet_worker:start_link(WorkerId),
-            spinet_scheduler:register_worker(WorkerId),
-            Pid
-        end
-        || WorkerId <- lists:seq(1, 5)],
+    spinet_workers_sup:add_worker(5),
     ArgsList = lists:seq(1, 20),
     TaskGroupIds = ["whatever", eeee, 888],
     TaskGroups = [{TaskGroupId, [?TASK_DELAYED(X, 50) || X <- ArgsList]}
@@ -104,7 +91,6 @@ multiple_waiters_test(_Cfg) ->
 
     [compare_lists(ArgsList, R) || R <- Results],
 
-    [begin unlink(Pid), exit(Pid, shutdown) end || Pid <- WorkerPids],
     ct:print("Test ~p passed", [?FUNCTION_NAME]).
 
 %% ====================================================================
