@@ -15,7 +15,8 @@
          add_task_group/1,
          task_done/3,
          get_results/0,
-         get_results/1]).
+         get_results/1,
+         get_results/2]).
 
 -export([dump/0]).
 
@@ -54,11 +55,20 @@ task_done(WorkerId, TaskGroupId, Result) ->
 
 -spec get_results() -> [term()].
 get_results() ->
-    gen_server:call(?SERVER, {get_results, ?DEF_GRP_ID}).
+    get_results(?DEF_GRP_ID, infinity).
 
 -spec get_results(TaskGroupId :: task_group_id()) -> [term()].
 get_results(TaskGroupId) ->
-    gen_server:call(?SERVER, {get_results, TaskGroupId}).
+    get_results(TaskGroupId, infinity).
+
+-spec get_results(TaskGroupId, Timeout) -> Result when
+        TaskGroupId :: task_group_id(),
+        Timeout :: timeout(),
+        Result :: [term()].
+get_results(TaskGroupId, Timeout) when 
+        (is_integer(Timeout) andalso Timeout >= 0) orelse
+        (Timeout == infinity) ->
+    gen_server:call(?SERVER, {get_results, TaskGroupId}, Timeout).
 
 
 -spec dump() -> ok.
@@ -84,8 +94,15 @@ init([]) ->
     {ok, #{workers => maps:new(),
            free_workers => [],
            tasks => [],
-           results => #{?DEF_GRP_ID => []}}}.
+           task_groups => #{?DEF_GRP_ID => new_task_group()}
+          }
+    }.
 
+new_task_group() ->
+    #{size => 0,
+      tasks_done => 0,
+      results => [],
+      waiters => []}.
 
 %% handle_call/3
 %% ====================================================================
@@ -108,14 +125,24 @@ handle_call(dump, _From, State) ->
     io:format("~p state: ~p~n", [?MODULE, State]),
     {reply, ok, State};
 
-handle_call({get_results, TaskGroupId}, _From,
-            #{results := ResultsMap} = State) ->
-    case maps:get(TaskGroupId, ResultsMap, undefined) of
+handle_call({get_results, TaskGroupId}, From,
+            #{task_groups := TaskGroups} = State) ->
+    case maps:get(TaskGroupId, TaskGroups, undefined) of
         undefined ->
-            Reply = {error, {'No results for task group with id: ', TaskGroupId}},
+            Reply = {error, {'No such task group: ', TaskGroupId}},
             {reply, Reply, State};
-        Results ->
-            {reply, lists:reverse(Results), State}
+        #{size := Size,
+          tasks_done := TDone,
+          results := Results0,
+          waiters := Waiters} when Size == TDone ->
+            Results = lists:reverse(Results0),
+            lists:foreach(fun(Pid) -> gen_server:reply(Pid, Results) end,
+                          Waiters),
+            {reply, Results, State};
+
+        TaskGroup0 = #{waiters := Waiters} ->
+            TaskGroup1 = TaskGroup0#{waiters => [From | Waiters]},
+            {noreply, State#{task_groups => TaskGroups#{TaskGroupId => TaskGroup1}}}
     end;
 
 handle_call(_Request, _From, State) ->
@@ -149,31 +176,47 @@ handle_cast({register_worker, Id, Pid},
 
 handle_cast({add_task, Task},
             #{free_workers := Free0,
-              tasks := Tasks0} = State) ->
+              tasks := Tasks0,
+              task_groups := TaskGroups0} = State) ->
     {NewTasks, NewWorkers} =
         schedule_tasks(Tasks0 ++ [{?DEF_GRP_ID, Task}], Free0),
+    #{size := Size} = TaskGroup = maps:get(?DEF_GRP_ID, TaskGroups0),
+    TaskGroupNew = TaskGroup#{size => Size + 1},
     {noreply, State#{tasks => NewTasks,
-                     free_workers => NewWorkers}};
+                     free_workers => NewWorkers,
+                     task_groups => TaskGroups0#{?DEF_GRP_ID => TaskGroupNew}}};
 
 handle_cast({add_task_group, {TaskGroupId, Tasks} = _TaskGroup},
             #{free_workers := Free0,
-              tasks := Tasks0} = State) ->
+              tasks := Tasks0,
+              task_groups := TaskGroups0} = State) ->
     TaskList = [{TaskGroupId, Task} || Task <- Tasks],
     {NewTasks, NewWorkers} =
         schedule_tasks(Tasks0 ++ TaskList, Free0),
+    #{size := Size} = TaskGroup =
+        maps:get(TaskGroupId, TaskGroups0, new_task_group()),
+    TaskGroupNew = TaskGroup#{size => Size + length(Tasks)},
     {noreply, State#{tasks => NewTasks,
-                     free_workers => NewWorkers}};
+                     free_workers => NewWorkers,
+                     task_groups => TaskGroups0#{TaskGroupId => TaskGroupNew}}};
 
 handle_cast({task_done, Id, TaskGroupId, Result},
             #{free_workers := Workers0,
               tasks := Tasks0,
-              results := Results0} = State) ->
+              task_groups := TaskGroups0} = State) ->
     {NewTasks, NewWorkers} = schedule_tasks(Tasks0, Workers0 ++ [Id]),
-    NewResults = store_result(Result, TaskGroupId, Results0),
-
-    {noreply, State#{free_workers => NewWorkers,
-                     tasks => NewTasks,
-                     results => NewResults}};
+    case maps:get(TaskGroupId, TaskGroups0, undefined) of
+        undefined ->
+            logger:error("Task done by worker=~p for unknown task group id=~p",
+                         [Id, TaskGroupId]),
+            {noreply, State#{free_workers => NewWorkers,
+                             tasks => NewTasks}};
+        TaskGroup0 ->
+            TaskGroup1 = store_result(Result, TaskGroup0),
+            {noreply, State#{free_workers => NewWorkers,
+                             tasks => NewTasks,
+                             task_groups => TaskGroups0#{TaskGroupId=>TaskGroup1}}}
+    end;
 
 handle_cast(_Msg, State) ->
     {noreply, State}.
@@ -251,6 +294,20 @@ schedule_tasks([Task | RestTask], [WorkerId | RestWorker]) ->
     spinet_worker:execute(WorkerId, Task),
     schedule_tasks(RestTask, RestWorker).
 
-store_result(Result, TaskGroupId, Results) ->
-    ResultsForGroup = maps:get(TaskGroupId, Results, []),
-    Results#{TaskGroupId => [Result | ResultsForGroup]}.
+store_result(Result,
+             #{size := Size,
+               tasks_done := Done,
+               results := Results0,
+               waiters := Waiters} = TaskGroup) ->
+    Done1 = Done + 1,
+    Results1 = [Result | Results0],
+    if Size == Done1 ->
+        lists:foreach(fun(Pid) ->
+                        gen_server:reply(Pid, lists:reverse(Results1))
+                      end,
+                      Waiters);
+        true ->
+            ok
+    end,
+    TaskGroup#{results => Results1,
+               tasks_done => Done1}.

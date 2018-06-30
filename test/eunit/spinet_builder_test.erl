@@ -1,9 +1,8 @@
-%% @author Wojciech
-%% @doc @todo Add description to spin_net_builder_util_test.
+%% @author wojanton
 
 -include_lib("mockgyver/include/mockgyver.hrl").
--module(spinet_builder_test).
 
+-module(spinet_builder_test).
 
 %% ====================================================================
 %% API functions
@@ -22,24 +21,6 @@ cleanup(_Cfg) ->
 %% ====================================================================
 %% Internal functions
 %% ====================================================================
-
-initial_network_test(_Cfg) ->
-    ct:print("Starting test ~p", [?FUNCTION_NAME]),
-    MaxM = 1000,
-    Repeats = 100,
-    M_list = [1,2,5 | [rand:uniform(MaxM) || _X <- lists:seq(1, Repeats)]],
-    [begin
-            Net = spinet_builder:initial_network(M, #{}),
-            ?assertEqual(M + 1, length(Net)),
-            [begin
-                ?assertNot(lists:member(Idx, Neighbours)),
-                ?assertEqual(M, length(Neighbours))
-            end
-            || #{idx := Idx, neighbours := Neighbours} <- Net]
-        end
-        || M <- M_list],
-    ct:print("Test ~p passed", [?FUNCTION_NAME]).
-
 create_normal_test(_Cfg) ->
     ct:print("Starting test ~p", [?FUNCTION_NAME]),
     [begin
@@ -61,6 +42,14 @@ create_normal_test(_Cfg) ->
         end
         || Idx <- lists:seq(1, N)]
      end
-     || {N, M} <- [{5, 1}, {10, 9}, {1000, 50}], Type <- [exn, sfn]
+     || {N, M} <- [{5, 1}, {10, 9}, {100, 20}], Type <- [exn, sfn]
     ],
     ct:print("Test ~p passed", [?FUNCTION_NAME]).
+
+create_invalid_params_test(_Cfg) ->
+    ct:print("Starting test ~p", [?FUNCTION_NAME]),
+    ?assertException(error, function_clause, spinet_builder:create_network(1, 1, sfn)),
+    ?assertException(error, function_clause, spinet_builder:create_network(10, 11, sfn)),
+    ?assertException(error, function_clause, spinet_builder:create_network(100, 1, eee)),
+    ct:print("Test ~p passed", [?FUNCTION_NAME]).
+

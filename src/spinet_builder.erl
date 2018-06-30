@@ -5,8 +5,7 @@
 %% ====================================================================
 %% API functions
 %% ====================================================================
--export([initial_network/2,
-         create_network/3,
+-export([create_network/3,
          create_network/4]).
 
 create_network(N, M, Type) when N > 2,
