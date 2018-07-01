@@ -17,7 +17,8 @@
          task_done/3,
          get_results/0,
          get_results/1,
-         get_results/2]).
+         get_results/2,
+         clear_task_group/1]).
 
 -export([dump/0]).
 
@@ -75,6 +76,8 @@ get_results(TaskGroupId, Timeout) when
         (Timeout == infinity) ->
     gen_server:call(?SERVER, {get_results, TaskGroupId}, Timeout).
 
+clear_task_group(TaskGroupId) ->
+    gen_server:call(?SERVER, {clear_task_group, TaskGroupId}).
 
 -spec dump() -> ok.
 dump() ->
@@ -153,6 +156,15 @@ handle_call({get_results, TaskGroupId}, From,
 handle_call(get_next_worker_id, _From, #{workers := Workers}=State) ->
     {reply, maps:size(Workers) + 1, State};
 
+handle_call({clear_task_group, TGI}, _From,
+            #{task_groups := TaskGroups}=State) ->
+    case maps:get(TGI, TaskGroups, undefined) of
+        undefined ->
+            {reply, ok, State};
+        _TG ->
+            {reply, ok, State#{task_groups => maps:remove(TGI, TaskGroups)}}
+    end;
+
 handle_call(_Request, _From, State) ->
     Reply = ok,
     {reply, Reply, State}.
@@ -220,7 +232,8 @@ handle_cast({task_done, Id, TaskGroupId, Result},
             {noreply, State#{free_workers => NewWorkers,
                              tasks => NewTasks}};
         TaskGroup0 ->
-            TaskGroup1 = store_result(Result, TaskGroup0),
+            TaskGroup1 = #{size:= Size, tasks_done:=Td} = store_result(Result, TaskGroup0),
+            logger:debug("Task done, TGI=~p, #~p/~p", [TaskGroupId, Td, Size]),
             {noreply, State#{free_workers => NewWorkers,
                              tasks => NewTasks,
                              task_groups => TaskGroups0#{TaskGroupId=>TaskGroup1}}}

@@ -29,16 +29,11 @@ create_normal_test(_Cfg) ->
         ?assertEqual(N, length(Net)),
         [begin
             % take Idx-th Node from Net
-            #{idx := NodeIdx, neighbours := Neighbours} = lists:nth(Idx, Net),
-            ?assertEqual(Idx, NodeIdx),
-            ?assertEqual(M, length(lists:usort(Neighbours))),
-            PotentialNeighbours = lists:seq(1, max(NodeIdx-1, M+1)),
-            % ct:print("NodeIdx=~p,~nNeighbours=~p,~nPotentialNeighbours=~p", [NodeIdx, Neighbours, PotentialNeighbours]),
-            [begin
-                 
-                 ?assert(lists:member(NeigbourIdx, PotentialNeighbours))
-             end
-             || NeigbourIdx <- Neighbours]
+            {value, #{idx := NodeIdx, neighbours := Neighbours}} =
+                lists:search(fun (#{idx := I}) when I == Idx -> true;
+                                 (_) -> false end,
+                             Net),
+            ?assert(length(lists:usort(Neighbours)) >= M)
         end
         || Idx <- lists:seq(1, N)]
      end
