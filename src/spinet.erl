@@ -45,7 +45,7 @@ degree(N, M, Type, Number) ->
 %% ====================================================================
 
 degree_dist(N, M, Type) ->
-    Net = spinet_builder:create_network(N, M, Type),
+    Net = spinet_network:create(N, M, Type),
     % io:format("Net: ~p~n", [Net]),
     Result = lists:foldl(
         fun(#{neighbours := Neighbours} = _Node, Acc) ->

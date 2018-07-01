@@ -1,27 +1,34 @@
 %% @author wojanton
 
--module(spinet_builder).
+-module(spinet_network).
 
 %% ====================================================================
 %% API functions
 %% ====================================================================
--export([create_network/3,
-         create_network/4]).
+-export([create/3,
+         create/4,
+         get/2]).
 
-create_network(N, M, Type) when N > 2,
-                                M < N,
-                               (Type == sfn orelse Type == exn) ->
-    create_network(N, M, Type, #{}).
+create(N, M, Type) when N > 2,
+                        M < N,
+                        (Type == sfn orelse Type == exn) ->
+    create(N, M, Type, #{}).
 
-
-create_network(N, M, Type, InitData)
-        when N > 2,
-             M < N,
-             (Type == sfn orelse Type == exn) ->
+create(N, M, Type, InitData) when N > 2,
+                             M < N,
+                             (Type == sfn orelse Type == exn) ->
     InitialNetwork = initial_network(M, InitData),
-    create_network_aux(N, M, Type, InitData,
-                       InitialNetwork,
-                       length(InitialNetwork) + 1).
+    create_aux(N, M, Type, InitData,
+               InitialNetwork, length(InitialNetwork) + 1).
+
+get(Idx, Net) ->
+    {value, Node} = lists:search(fun (#{idx := I}) when I == Idx -> true;
+                                     (_) -> false end, Net),
+    Node.
+
+%% ====================================================================
+%% Internal functions
+%% ====================================================================
 
 initial_network(M, InitData) ->
     Indexes = lists:seq(1, M + 1),
@@ -33,17 +40,18 @@ initial_network(M, InitData) ->
      end
      || Idx <- Indexes].
 
-%% ====================================================================
-%% Internal functions
-%% ====================================================================
-
-create_network_aux(N, M, Type, _InitData, Network, NextIdx) when NextIdx > N ->
-    logger:debug("builder - finished net: N=~w, M=~w, type=~w, NextIdx=~w",
-                 [N, M, Type, NextIdx]),
+create_aux(N, M, Type, _InitData, Network, NextIdx) when NextIdx > N ->
+    logger:debug("builder - finished net: N=~w, M=~w, type=~w",
+                 [N, M, Type]),
     Network;
 
-create_network_aux(N, M, exn, InitData, Net, NextIdx) ->
-    SelectedNeighbours = spinet_util:unique_seq(M, NextIdx - 1),
+create_aux(N, M, Type, InitData, Net, NextIdx) ->
+    SelectedNeighbours = case Type of
+        exn ->
+            spinet_util:unique_seq(M, NextIdx - 1);
+        sfn ->
+            find_sfn_neighbours(Net, M)
+    end,
     NewNode = #{idx => NextIdx,
                 neighbours => SelectedNeighbours,
                 data => InitData
@@ -51,17 +59,7 @@ create_network_aux(N, M, exn, InitData, Net, NextIdx) ->
     % Each of nodes selected as neighbour must have the newly created node
     % add as their neighbour as well
     NewNet = update_neighbours(NextIdx, SelectedNeighbours, Net),
-    create_network_aux(N, M, exn, InitData, NewNet ++ [NewNode], NextIdx + 1);
-
-create_network_aux(N, M, sfn, InitData, Net, NextIdx) ->
-    SelectedNeighbours = find_sfn_neighbours(Net, M),
-    NewNode = #{idx => NextIdx,
-                neighbours => SelectedNeighbours,
-                data => InitData},
-    % Each of nodes selected as neighbour must have the newly created node
-    % add as their neighbour as well
-    NewNet = update_neighbours(NextIdx, SelectedNeighbours, Net),
-    create_network_aux(N, M, sfn, InitData, NewNet ++ [NewNode], NextIdx + 1).
+    create_aux(N, M, Type, InitData, NewNet ++ [NewNode], NextIdx + 1).
 
 find_sfn_neighbours(Network, M) ->
     % create a list which contains each index 'i' as many times

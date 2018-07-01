@@ -7,14 +7,13 @@
             "label": "eunit",
             "type": "shell",
             "command": "rebar3 eunit",
-            "problemMatcher": [
-                "$erlang"
-            ]
+            "problemMatcher": []
         },
         {
             "label": "compile",
             "type": "shell",
-            "command": "rebar3 compile"
+            "command": "rebar3 compile",
+            "problemMatcher": []
         }
     ]
 }
