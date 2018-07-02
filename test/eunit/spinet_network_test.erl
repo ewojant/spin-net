@@ -30,6 +30,7 @@ create_normal_test(_Cfg) ->
         [begin
             % take Idx-th Node from Net
             #{idx := Idx, neighbours := Neighbours} = spinet_network:get(Idx, Net),
+            % ct:print("Idx=~p, len(Neigh)=~p, neighbours=~p", [Idx, length(Neighbours), Neighbours]),
             ?assert(length(lists:usort(Neighbours)) >= M)
         end
         || Idx <- lists:seq(1, N)]

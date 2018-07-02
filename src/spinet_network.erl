@@ -22,9 +22,13 @@ create(N, M, Type, InitData) when N > 2,
                InitialNetwork, length(InitialNetwork) + 1).
 
 get(Idx, Net) ->
-    {value, Node} = lists:search(fun (#{idx := I}) when I == Idx -> true;
-                                     (_) -> false end, Net),
-    Node.
+    case lists:search(fun (#{idx := I}) when I == Idx -> true;
+                          (_) -> false end, Net) of
+        {value, Node} ->
+            Node;
+        false ->
+            undefined
+    end.
 
 %% ====================================================================
 %% Internal functions
