@@ -27,7 +27,7 @@
 -type task_group() :: {task_group_id(), [task()]}.
 
 -define(SERVER, ?MODULE).
--define(DEF_GRP_ID, undefined).
+-define(DEF_GRP_ID, def_grp_id).
 
 start_link() ->
     gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).

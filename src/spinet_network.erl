@@ -7,13 +7,32 @@
 %% ====================================================================
 -export([create/3,
          create/4,
-         get/2]).
+         get/2,
+         add/2]).
 
+-type network() :: list(any()).
+-type net_type() :: sfn | exn.
+-type net_idx() :: pos_integer().
+-type net_node() :: #{idx := net_idx(),
+                      neighbours := list(net_idx()),
+                      data := any()}.
+
+-spec create(N, M, Type) -> Result when
+        N :: pos_integer(),
+        M :: pos_integer(),
+        Type :: net_type(),
+        Result :: network().
 create(N, M, Type) when N > 2,
                         M < N,
                         (Type == sfn orelse Type == exn) ->
     create(N, M, Type, #{}).
 
+-spec create(N, M, Type, InitData) -> Result when
+        N :: pos_integer(),
+        M :: pos_integer(),
+        Type :: net_type(),
+        InitData :: any(),
+        Result :: network().
 create(N, M, Type, InitData) when N > 2,
                              M < N,
                              (Type == sfn orelse Type == exn) ->
@@ -21,6 +40,7 @@ create(N, M, Type, InitData) when N > 2,
     create_aux(N, M, Type, InitData,
                InitialNetwork, length(InitialNetwork) + 1).
 
+-spec get(Idx :: net_idx(), Net :: network()) -> net_node().
 get(Idx, Net) ->
     case lists:search(fun (#{idx := I}) when I == Idx -> true;
                           (_) -> false end, Net) of
@@ -29,6 +49,14 @@ get(Idx, Net) ->
         false ->
             undefined
     end.
+
+-spec add(Node :: net_node(), Net :: network()) -> network().
+add(Node, Net) ->
+    Net ++ [Node].
+
+-spec delete(Node :: net_node(), Net :: network()) -> network().
+delete(Node, Net) ->
+    lists:delete(Node, Net).
 
 %% ====================================================================
 %% Internal functions
@@ -44,26 +72,26 @@ initial_network(M, InitData) ->
      end
      || Idx <- Indexes].
 
-create_aux(N, M, Type, _InitData, Network, NextIdx) when NextIdx > N ->
+create_aux(N, M, Type, _InitData, Network, IdxToCreate) when IdxToCreate > N ->
     logger:debug("builder - finished net: N=~w, M=~w, type=~w",
                  [N, M, Type]),
     Network;
 
-create_aux(N, M, Type, InitData, Net, NextIdx) ->
+create_aux(N, M, Type, InitData, Net, IdxToCreate) ->
     SelectedNeighbours = case Type of
         exn ->
-            spinet_util:unique_seq(M, NextIdx - 1);
+            spinet_util:unique_seq(M, IdxToCreate - 1);
         sfn ->
             find_sfn_neighbours(Net, M)
     end,
-    NewNode = #{idx => NextIdx,
+    NewNode = #{idx => IdxToCreate,
                 neighbours => SelectedNeighbours,
                 data => InitData
                },
     % Each of nodes selected as neighbour must have the newly created node
     % add as their neighbour as well
-    NewNet = update_neighbours(NextIdx, SelectedNeighbours, Net),
-    create_aux(N, M, Type, InitData, NewNet ++ [NewNode], NextIdx + 1).
+    NewNet = update_neighbours(IdxToCreate, SelectedNeighbours, Net),
+    create_aux(N, M, Type, InitData, add(NewNode, NewNet), IdxToCreate + 1).
 
 find_sfn_neighbours(Network, M) ->
     % create a list which contains each index 'i' as many times
@@ -82,15 +110,9 @@ find_sfn_neighbours(Network, M) ->
 update_neighbours(IdxToAdd, SelectedNeighbours, Net) ->
     lists:foldl(
         fun(Idx, NetAcc) ->
-            % io:format("~p Looking for node idx=~p~n", [self(), Idx]),
-            {value, Node = #{neighbours := N0}} = lists:search(
-                fun(#{idx := Index}) when Index == Idx -> true;
-                    (#{}) -> false
-                end,
-                NetAcc),
-            % io:format("~p Found node=~p~n", [self(), Node]),
+            Node = #{neighbours := N0} = spinet_network:get(Idx, NetAcc),
             NewNode = Node#{neighbours => [IdxToAdd | N0]},
-            [NewNode | lists:delete(Node, NetAcc)]
+            add(NewNode, delete(Node, NetAcc))
         end,
         Net,
         SelectedNeighbours).
