@@ -89,7 +89,7 @@ create_aux(N, M, Type, InitData, Net, IdxToCreate) ->
                 data => InitData
                },
     % Each of nodes selected as neighbour must have the newly created node
-    % add as their neighbour as well
+    % added as their neighbour as well
     NewNet = update_neighbours(IdxToCreate, SelectedNeighbours, Net),
     create_aux(N, M, Type, InitData, add(NewNode, NewNet), IdxToCreate + 1).
 

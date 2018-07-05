@@ -10,7 +10,9 @@
 start(_StartType, StartArgs) ->
     logger:set_primary_config(level, debug),
     logger:info("Starting spinet, Args=~p", [StartArgs]),
-    spinet_sup:start_link(StartArgs).
+    Ret = spinet_sup:start_link(StartArgs),
+    spinet_workers_sup:add_worker(20),
+    Ret.
 
 stop(_State) -> ok.
 
@@ -19,13 +21,14 @@ stop(_State) -> ok.
 %% ====================================================================
 
 degree(N, M, Type, Number) ->
-    spinet_workers_sup:add_worker(20),
     TG = {degree_dist_calc,
           [fun() -> degree_dist(N, M, Type) end || _X <- lists:seq(1, Number)]},
 
     spinet_scheduler:add_task_group(TG),
     Results = spinet_scheduler:get_results(degree_dist_calc),
     spinet_scheduler:clear_task_group(degree_dist_calc),
+    % Go over results from all tasks and create a mapping
+    % node degree => number of occurences
     DistSum = lists:foldl(
         fun(Result, Acc) ->
             maps:fold(fun(D, V, AccIn) ->
@@ -36,6 +39,8 @@ degree(N, M, Type, Number) ->
         end,
         #{},
         Results),
+    % divide number of occurences of each degree by number of
+    % nodes in each network and number of networks
     Dist = maps:map(fun(_K, V) -> V / (N * Number) end, DistSum),
     io:format("Degree distribution: ~p~n", [Dist]),
     ok.
